@@ -38,3 +38,16 @@ export const createAssessmentInputSchema = z.object({
 });
 
 export type CreateAssessmentInput = z.infer<typeof createAssessmentInputSchema>;
+
+export const attachQuestionsToAssessmentInputSchema = z.object({
+  assessmentId: z.string().min(1),
+  questionIds: z.array(z.string().min(1)).min(1).max(500),
+  sectionId: z.string().min(1).nullable().optional(),
+  points: z.number().int().min(1).default(1),
+}).superRefine((input, ctx) => {
+  if (new Set(input.questionIds).size !== input.questionIds.length) {
+    ctx.addIssue({ code: "custom", path: ["questionIds"], message: "Question IDs must be unique" });
+  }
+});
+
+export type AttachQuestionsToAssessmentInput = z.infer<typeof attachQuestionsToAssessmentInputSchema>;

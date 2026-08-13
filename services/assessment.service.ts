@@ -9,7 +9,7 @@ import { createAuditLog } from "@/server/audit";
 import type { Actor } from "@/server/actor";
 import { requirePermission } from "@/server/authorization";
 import { AppError } from "@/server/errors";
-import { type CreateAssessmentInput } from "@/schemas/assessment.schema";
+import { attachQuestionsToAssessmentInputSchema, type AttachQuestionsToAssessmentInput, type CreateAssessmentInput } from "@/schemas/assessment.schema";
 import { startAttemptInputSchema, submitAttemptInputSchema, type StartAttemptInput, type SubmitAttemptInput } from "@/schemas/attempt.schema";
 import { calculateMastery } from "@/services/mastery.service";
 import { gradeAnswer } from "@/services/question.service";
@@ -133,6 +133,87 @@ export async function createAssessment(actor: Actor, input: CreateAssessmentInpu
     });
     await createAuditLog({ actor, action: "CREATE", entityType: "ASSESSMENT", entityId: assessment.id, after: assessment, db: tx });
     return assessment;
+  });
+}
+
+export async function attachQuestionsToAssessment(actor: Actor, input: AttachQuestionsToAssessmentInput) {
+  requirePermission(actor, "assessment:write");
+  const data = attachQuestionsToAssessmentInputSchema.parse(input);
+
+  return prisma.$transaction(async (tx) => {
+    const assessment = await tx.assessment.findUnique({
+      where: { id: data.assessmentId },
+      select: { id: true, status: true, title: true },
+    });
+    if (!assessment) throw new AppError("NOT_FOUND", "Assessment not found");
+    if (actor.type === "MCP" && assessment.status !== ContentStatus.DRAFT) {
+      throw new AppError("FORBIDDEN", "MCP may only attach questions to draft assessments");
+    }
+
+    if (data.sectionId) {
+      const section = await tx.assessmentSection.findFirst({
+        where: { id: data.sectionId, assessmentId: data.assessmentId },
+        select: { id: true },
+      });
+      if (!section) throw new AppError("VALIDATION", "Section does not belong to the assessment");
+    }
+
+    const questions = await tx.question.findMany({
+      where: { id: { in: data.questionIds } },
+      select: { id: true, status: true },
+    });
+    const foundQuestionIds = new Set(questions.map((question) => question.id));
+    const missingQuestionIds = data.questionIds.filter((questionId) => !foundQuestionIds.has(questionId));
+    if (missingQuestionIds.length > 0) {
+      throw new AppError("NOT_FOUND", "One or more questions were not found", { details: { questionIds: missingQuestionIds } });
+    }
+    if (actor.type === "MCP" && questions.some((question) => question.status !== ContentStatus.DRAFT)) {
+      throw new AppError("FORBIDDEN", "MCP may only attach draft questions");
+    }
+
+    const existing = await tx.assessmentQuestion.findMany({
+      where: { assessmentId: data.assessmentId, questionId: { in: data.questionIds } },
+      select: { questionId: true, position: true, assessmentSectionId: true, points: true },
+    });
+    const existingIds = new Set(existing.map((item) => item.questionId));
+    const questionIdsToAttach = data.questionIds.filter((questionId) => !existingIds.has(questionId));
+    const maxPosition = await tx.assessmentQuestion.aggregate({
+      where: { assessmentId: data.assessmentId },
+      _max: { position: true },
+    });
+    const firstPosition = (maxPosition._max.position ?? -1) + 1;
+
+    if (questionIdsToAttach.length > 0) {
+      await tx.assessmentQuestion.createMany({
+        data: questionIdsToAttach.map((questionId, index) => ({
+          assessmentId: data.assessmentId,
+          assessmentSectionId: data.sectionId ?? null,
+          questionId,
+          position: firstPosition + index,
+          points: data.points,
+        })),
+      });
+    }
+
+    const attached = await tx.assessmentQuestion.findMany({
+      where: { assessmentId: data.assessmentId, questionId: { in: data.questionIds } },
+      orderBy: { position: "asc" },
+      select: { id: true, questionId: true, assessmentSectionId: true, position: true, points: true },
+    });
+    await createAuditLog({
+      actor,
+      action: "ATTACH_QUESTIONS",
+      entityType: "ASSESSMENT",
+      entityId: data.assessmentId,
+      after: { questionIds: questionIdsToAttach, sectionId: data.sectionId ?? null, points: data.points },
+      db: tx,
+    });
+
+    return {
+      assessment: { id: assessment.id, title: assessment.title },
+      attached,
+      alreadyAttached: existing,
+    };
   });
 }
 

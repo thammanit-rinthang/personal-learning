@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AssessmentTrigger, AssessmentType, FeedbackMode } from "@/app/generated/prisma/client";
 import type { Actor } from "@/server/actor";
-import { createAssessment } from "@/services/assessment.service";
+import { attachQuestionsToAssessment, createAssessment } from "@/services/assessment.service";
 import { mcpErrorResult, jsonResult } from "@/mcp/tools/result";
 
 export function registerAssessmentWriteTools(server: McpServer, actor: Actor) {
@@ -18,5 +18,16 @@ export function registerAssessmentWriteTools(server: McpServer, actor: Actor) {
     },
   }, async (input) => {
     try { return jsonResult(await createAssessment(actor, input)); } catch (error) { return mcpErrorResult(error); }
+  });
+  server.registerTool("attach_questions_to_assessment", {
+    description: "Attach draft question bank items to a draft assessment. Safe to retry; already attached questions are returned separately.",
+    inputSchema: {
+      assessmentId: z.string().min(1),
+      questionIds: z.array(z.string().min(1)).min(1).max(500),
+      sectionId: z.string().min(1).nullable().optional(),
+      points: z.number().int().min(1).default(1),
+    },
+  }, async (input) => {
+    try { return jsonResult(await attachQuestionsToAssessment(actor, input)); } catch (error) { return mcpErrorResult(error); }
   });
 }
