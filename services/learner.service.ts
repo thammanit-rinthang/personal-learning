@@ -1,6 +1,6 @@
 import "server-only";
 
-import { ContentStatus, LessonProgressStatus } from "@/app/generated/prisma/enums";
+import { AssessmentTrigger, ContentStatus, LessonProgressStatus } from "@/app/generated/prisma/enums";
 import { prisma } from "@/db/prisma";
 import { createAuditLog } from "@/server/audit";
 import type { Prisma } from "@/app/generated/prisma/client";
@@ -22,12 +22,14 @@ export type LearnerCourseOutline = {
     totalLessons: number;
     percent: number;
   };
+  assessments?: Array<{ id: string; title: string; passingScore: number; isRequired: boolean }>;
   modules: Array<{
     id: string;
     slug: string;
     title: string;
     description: string | null;
     position: number;
+    assessments?: Array<{ id: string; title: string; passingScore: number; isRequired: boolean }>;
     lessons: Array<{
       id: string;
       slug: string;
@@ -97,8 +99,10 @@ async function findEnrolledCourse(actor: Actor, courseSlug: string) {
                 orderBy: { position: "asc" },
                 include: { progress: { where: { userId: actor.id }, select: { status: true } } },
               },
+              triggeredAssessments: { where: { status: ContentStatus.PUBLISHED, trigger: AssessmentTrigger.MODULE_COMPLETED }, orderBy: { title: "asc" }, select: { id: true, title: true, passingScore: true, isRequired: true } },
             },
           },
+          assessments: { where: { status: ContentStatus.PUBLISHED, trigger: AssessmentTrigger.COURSE_COMPLETED }, orderBy: { title: "asc" }, select: { id: true, title: true, passingScore: true, isRequired: true } },
         },
       },
     },
@@ -121,6 +125,7 @@ export async function getLearnerCourseOutline(actor: Actor, courseSlug: string):
     title: course.title,
     description: course.description,
     subjectTitle: course.subject.title,
+    assessments: course.assessments,
     progress: {
       completedLessons: progress.completedLessons,
       totalLessons: progress.totalLessons,
@@ -132,6 +137,7 @@ export async function getLearnerCourseOutline(actor: Actor, courseSlug: string):
       title: module.title,
       description: module.description,
       position: module.position,
+      assessments: module.triggeredAssessments,
       lessons: module.lessons.map((lesson) => ({
         id: lesson.id,
         slug: lesson.slug,
@@ -225,6 +231,12 @@ export async function getLearnerLesson(actor: Actor, courseSlug: string, moduleS
     throw new AppError("NOT_FOUND", "Lesson not found");
   }
 
+  const lessonAssessments = await prisma.assessment.findMany({
+    where: { courseId: outline.id, trigger: AssessmentTrigger.LESSON_COMPLETED, triggerLessonId: lesson.id, status: ContentStatus.PUBLISHED },
+    orderBy: { title: "asc" },
+    select: { id: true, title: true, passingScore: true, isRequired: true },
+  });
+
   const allLessons = outline.modules.flatMap((item) =>
     item.lessons.map((itemLesson) => ({ ...itemLesson, moduleSlug: item.slug })),
   );
@@ -246,6 +258,7 @@ export async function getLearnerLesson(actor: Actor, courseSlug: string, moduleS
       concepts: lesson.concepts,
       sources: lesson.sourceLinks.map(({ source }) => source),
       status: lessonSummary.status,
+      assessments: lessonAssessments,
     },
     previousLesson: index > 0 ? allLessons[index - 1] : null,
     nextLesson: index >= 0 && index < allLessons.length - 1 ? allLessons[index + 1] : null,

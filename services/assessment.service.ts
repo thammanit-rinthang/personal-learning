@@ -1,7 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
-import { ContentStatus } from "@/app/generated/prisma/enums";
+import { AssessmentTrigger, ContentStatus } from "@/app/generated/prisma/enums";
 import type { Prisma, QuestionType } from "@/app/generated/prisma/client";
 import { prisma } from "@/db/prisma";
 import type { TransactionClient } from "@/db/transaction";
@@ -70,6 +70,17 @@ function seededShuffle<T>(items: T[], seed: string): T[] {
   return shuffled;
 }
 
+async function validateTriggerTarget(tx: TransactionClient, input: CreateAssessmentInput) {
+  if (input.trigger === AssessmentTrigger.MODULE_COMPLETED) {
+    const targetModule = await tx.module.findFirst({ where: { id: input.triggerModuleId ?? "", courseId: input.courseId }, select: { id: true } });
+    if (!targetModule) throw new AppError("VALIDATION", "The selected module must belong to the assessment course");
+  }
+  if (input.trigger === AssessmentTrigger.LESSON_COMPLETED) {
+    const lesson = await tx.lesson.findFirst({ where: { id: input.triggerLessonId ?? "", module: { courseId: input.courseId } }, select: { id: true } });
+    if (!lesson) throw new AppError("VALIDATION", "The selected lesson must belong to the assessment course");
+  }
+}
+
 function toLearnerAttempt(attempt: {
   id: string;
   isSubmitted: boolean;
@@ -100,6 +111,7 @@ export async function createAssessment(actor: Actor, input: CreateAssessmentInpu
   requirePermission(actor, "assessment:write");
 
   return prisma.$transaction(async (tx) => {
+    await validateTriggerTarget(tx, input);
     const assessment = await tx.assessment.create({
       data: {
         courseId: input.courseId,
@@ -110,6 +122,11 @@ export async function createAssessment(actor: Actor, input: CreateAssessmentInpu
         feedbackMode: input.feedbackMode,
         passingScore: input.passingScore,
         randomizeOrder: input.randomizeOrder,
+        trigger: input.trigger,
+        isRequired: input.isRequired,
+        maxAttempts: input.maxAttempts ?? null,
+        triggerModuleId: input.triggerModuleId ?? null,
+        triggerLessonId: input.triggerLessonId ?? null,
         sections: input.sections ? { create: input.sections.map((section) => ({ ...section })) } : undefined,
       },
       include: { sections: true },
@@ -117,6 +134,65 @@ export async function createAssessment(actor: Actor, input: CreateAssessmentInpu
     await createAuditLog({ actor, action: "CREATE", entityType: "ASSESSMENT", entityId: assessment.id, after: assessment, db: tx });
     return assessment;
   });
+}
+
+export async function updateAssessment(actor: Actor, assessmentId: string, input: CreateAssessmentInput) {
+  requirePermission(actor, "assessment:write");
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.assessment.findUnique({ where: { id: assessmentId }, select: { id: true } });
+    if (!existing) throw new AppError("NOT_FOUND", "Assessment not found");
+    await validateTriggerTarget(tx, input);
+    const assessment = await tx.assessment.update({
+      where: { id: assessmentId },
+      data: {
+        courseId: input.courseId,
+        slug: input.slug,
+        title: input.title,
+        description: input.description,
+        type: input.type,
+        feedbackMode: input.feedbackMode,
+        passingScore: input.passingScore,
+        randomizeOrder: input.randomizeOrder,
+        trigger: input.trigger,
+        isRequired: input.isRequired,
+        maxAttempts: input.maxAttempts ?? null,
+        triggerModuleId: input.triggerModuleId ?? null,
+        triggerLessonId: input.triggerLessonId ?? null,
+      },
+    });
+    await createAuditLog({ actor, action: "UPDATE", entityType: "ASSESSMENT", entityId: assessment.id, after: assessment, db: tx });
+    return assessment;
+  });
+}
+
+async function assertAssessmentUnlocked(
+  tx: TransactionClient,
+  assessment: { trigger: AssessmentTrigger; triggerModuleId: string | null; triggerLessonId: string | null; courseId: string },
+  userId: string,
+) {
+  if (assessment.trigger === AssessmentTrigger.MANUAL) return;
+
+  if (assessment.trigger === AssessmentTrigger.LESSON_COMPLETED) {
+    const progress = assessment.triggerLessonId
+      ? await tx.lessonProgress.findUnique({ where: { userId_lessonId: { userId, lessonId: assessment.triggerLessonId } }, select: { status: true } })
+      : null;
+    if (progress?.status !== "COMPLETED") throw new AppError("FORBIDDEN", "Complete the required lesson before starting this assessment");
+    return;
+  }
+
+  const lessons = await tx.lesson.findMany({
+    where: {
+      status: ContentStatus.PUBLISHED,
+      ...(assessment.trigger === AssessmentTrigger.MODULE_COMPLETED
+        ? { moduleId: assessment.triggerModuleId ?? "" }
+        : { module: { courseId: assessment.courseId } }),
+    },
+    select: { id: true, progress: { where: { userId }, select: { status: true } } },
+  });
+  if (lessons.length === 0 || lessons.some((lesson) => lesson.progress[0]?.status !== "COMPLETED")) {
+    throw new AppError("FORBIDDEN", "Complete the required learning content before starting this assessment");
+  }
 }
 
 export async function startAssessmentAttempt(actor: Actor, input: StartAttemptInput | string): Promise<LearnerAttempt> {
@@ -140,6 +216,13 @@ export async function startAssessmentAttempt(actor: Actor, input: StartAttemptIn
       throw new AppError("NOT_FOUND", "Assessment not found");
     }
 
+    await assertAssessmentUnlocked(tx, assessment, actor.id);
+
+    const attemptNumber = (await tx.assessmentAttempt.count({ where: { assessmentId, userId: actor.id } })) + 1;
+    if (assessment.maxAttempts !== null && attemptNumber > assessment.maxAttempts) {
+      throw new AppError("CONFLICT", "Maximum assessment attempts reached");
+    }
+
     const selectionSeed = crypto.randomBytes(16).toString("hex");
     const selected = assessment.sections.length > 0
       ? assessment.sections.flatMap((section) => {
@@ -155,7 +238,6 @@ export async function startAssessmentAttempt(actor: Actor, input: StartAttemptIn
       throw new AppError("VALIDATION", "Assessment has no available questions");
     }
 
-    const attemptNumber = (await tx.assessmentAttempt.count({ where: { assessmentId, userId: actor.id } })) + 1;
     const attempt = await tx.assessmentAttempt.create({
       data: {
         assessmentId,

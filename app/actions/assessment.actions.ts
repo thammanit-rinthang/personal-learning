@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireCurrentActor } from "@/server/auth";
 import { AppError } from "@/server/errors";
-import { createAssessment, startAssessmentAttempt, submitAssessmentAttempt } from "@/services/assessment.service";
+import { createAssessment, startAssessmentAttempt, submitAssessmentAttempt, updateAssessment } from "@/services/assessment.service";
 import { createAssessmentInputSchema } from "@/schemas/assessment.schema";
 import { startAttemptInputSchema, submitAttemptInputSchema } from "@/schemas/attempt.schema";
 
@@ -14,6 +14,18 @@ export async function createAssessmentAction(formData: FormData) {
     const actor = await requireCurrentActor();
     const data = createAssessmentInputSchema.parse(JSON.parse(String(formData.get("data") ?? "{}")));
     const assessment = await createAssessment(actor, data);
+    return { success: true, data: { id: assessment.id } };
+  } catch (error) {
+    return { success: false, error: error instanceof AppError ? error.message : "An unexpected error occurred" };
+  }
+}
+
+export async function updateAssessmentAction(assessmentId: string, formData: FormData) {
+  try {
+    const actor = await requireCurrentActor();
+    const data = createAssessmentInputSchema.parse(JSON.parse(String(formData.get("data") ?? "{}")));
+    const assessment = await updateAssessment(actor, assessmentId, data);
+    revalidatePath("/admin/assessments");
     return { success: true, data: { id: assessment.id } };
   } catch (error) {
     return { success: false, error: error instanceof AppError ? error.message : "An unexpected error occurred" };
