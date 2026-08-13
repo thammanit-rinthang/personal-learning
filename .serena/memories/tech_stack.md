@@ -1,0 +1,1 @@
+Next.js 16.3 App Router, React 19, TS strict, Tailwind v4. Prisma ORM 7 + @prisma/adapter-pg/Postgres; generated client under app/generated/prisma. Zod 4 validates external inputs. Vitest 4 and Playwright. pnpm 11 only.

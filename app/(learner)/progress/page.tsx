@@ -1,0 +1,10 @@
+import Link from "next/link";
+import { requireCurrentActor } from "@/server/auth";
+import { getLearnerDashboard } from "@/services/learner.service";
+import { getConceptMastery } from "@/services/mastery.service";
+
+export default async function ProgressPage() {
+  const actor = await requireCurrentActor();
+  const [dashboard, mastery] = await Promise.all([getLearnerDashboard(actor), getConceptMastery(actor, actor.id)]);
+  return <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12"><header><p className="text-sm font-medium text-[var(--primary)]">ภาพรวมการเรียน</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">ความคืบหน้า</h1></header><section className="mt-8" aria-labelledby="courses-heading"><h2 id="courses-heading" className="text-xl font-semibold">รายวิชาที่กำลังเรียน</h2><ul className="mt-4 space-y-3">{dashboard.courses.map((course) => <li key={course.slug} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5"><Link href={`/courses/${course.slug}`} className="font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]">{course.title}</Link><p className="mt-2 text-sm text-[var(--muted-foreground)]">เรียนจบ {course.progress.completedLessons} จาก {course.progress.totalLessons} บท · {course.progress.percent}%</p></li>)}</ul></section><section className="mt-10" aria-labelledby="mastery-heading"><h2 id="mastery-heading" className="text-xl font-semibold">ความเข้าใจตามหัวข้อ</h2>{mastery.length ? <ul className="mt-4 space-y-3">{mastery.map((item) => <li key={item.conceptId} className="flex items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5"><span className="font-medium">{item.concept.title}</span><span className="text-sm text-[var(--muted-foreground)]">{item.masteryPercent}% · ถูก {item.correctCount} / ผิด {item.incorrectCount}</span></li>)}</ul> : <p className="mt-4 text-[var(--muted-foreground)]">เมื่อทำแบบประเมินแล้ว ข้อมูลความเข้าใจจะแสดงที่นี่</p>}</section></main>;
+}

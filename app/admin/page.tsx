@@ -1,0 +1,12 @@
+import Link from "next/link";
+import { getCurrentActor } from "@/server/auth";
+import { listCourses } from "@/services/course.service";
+import { listQuestions } from "@/services/question.service";
+import { AdminPageHeader, AdminEmpty, Status } from "@/components/admin/admin-ui";
+
+export default async function AdminPage() {
+  const actor = await getCurrentActor();
+  if (!actor) return <main className="p-6"><p>กรุณาเข้าสู่ระบบเพื่อใช้งานพื้นที่ผู้ดูแล</p></main>;
+  const [courses, questions] = await Promise.all([listCourses(actor), listQuestions(actor, { pageSize: 5 })]);
+  return <div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8"><AdminPageHeader title="พื้นที่ทำงานเนื้อหา" description="ติดตามฉบับร่าง งานที่รอตรวจทาน และจัดการเนื้อหาการเรียนรู้จากจุดเดียว" /><div className="mt-8 grid gap-6 lg:grid-cols-2"><section><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">หลักสูตรล่าสุด</h2><Link href="/admin/courses" className="min-h-11 px-2 py-2 text-sm font-semibold text-[var(--primary)]">ดูทั้งหมด</Link></div>{courses.length ? <ul className="mt-3 divide-y divide-[var(--border)] border-y border-[var(--border)]">{courses.slice(0, 5).map((course) => <li key={course.id} className="flex items-center justify-between gap-4 py-4"><Link href={`/admin/courses/${course.id}`} className="font-medium hover:underline">{course.title}</Link><Status value={course.status} /></li>)}</ul> : <div className="mt-3"><AdminEmpty title="ยังไม่มีหลักสูตร" description="สร้างหลักสูตรฉบับร่างเพื่อเริ่มจัดโครงสร้างเนื้อหา" href="/admin/courses" actionLabel="ไปยังหลักสูตร" /></div>}</section><section><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">คำถามที่แก้ไขล่าสุด</h2><Link href="/admin/questions" className="min-h-11 px-2 py-2 text-sm font-semibold text-[var(--primary)]">ดูคลังคำถาม</Link></div>{questions.items.length ? <ul className="mt-3 divide-y divide-[var(--border)] border-y border-[var(--border)]">{questions.items.map((question) => <li key={question.id} className="flex items-center justify-between gap-4 py-4"><p className="line-clamp-2 text-sm">{question.prompt}</p><Status value={question.status} /></li>)}</ul> : <div className="mt-3"><AdminEmpty type="question" title="ยังไม่มีคำถาม" description="เพิ่มคำถามเพื่อใช้กับแบบฝึกหัดและแบบประเมิน" href="/admin/questions" actionLabel="ไปยังคลังคำถาม" /></div>}</section></div></div>;
+}

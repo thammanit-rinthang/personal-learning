@@ -1,0 +1,1 @@
+For code changes run relevant focused Vitest tests, then pnpm exec tsc --noEmit and pnpm lint. Run pnpm build at phase boundaries or when requested. Do not claim validation passed without output.

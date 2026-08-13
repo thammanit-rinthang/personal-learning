@@ -1,0 +1,480 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ContentStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
+enum UserRole {
+  LEARNER
+  EDITOR
+  REVIEWER
+  ADMIN
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  NUMERIC
+}
+
+enum AssessmentType {
+  PRACTICE
+  CONCEPT_CHECK
+  QUIZ
+  MASTERY_TEST
+  MIDTERM
+  FINAL_EXAM
+}
+
+enum FeedbackMode {
+  IMMEDIATE
+  AFTER_SUBMIT
+  AFTER_CLOSING
+}
+
+enum LessonProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum ActorType {
+  USER
+  MCP
+  SYSTEM
+}
+
+model User {
+  id               String               @id @default(cuid())
+  email            String               @unique
+  username         String?              @unique
+  name             String
+  role             UserRole             @default(LEARNER)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  enrollments      CourseEnrollment[]
+  lessonProgress   LessonProgress[]
+  mastery          UserConceptMastery[]
+  mistakes         MistakeRecord[]
+  attempts         AssessmentAttempt[]
+  auditLogs        AuditLog[]           @relation("UserActorAuditLogs")
+  contentRevisions ContentRevision[]    @relation("RevisionActor")
+  passwordHash     String?
+  sessions         Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+model Subject {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  courses     Course[]
+}
+
+model Course {
+  id          String             @id @default(cuid())
+  subjectId   String
+  slug        String             @unique
+  title       String
+  description String?
+  status      ContentStatus      @default(DRAFT)
+  version     Int                @default(1)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  subject     Subject            @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  modules     Module[]
+  assessments Assessment[]
+  enrollments CourseEnrollment[]
+  sources     Source[]
+
+  @@index([subjectId, status])
+}
+
+model Module {
+  id          String   @id @default(cuid())
+  courseId    String
+  slug        String
+  title       String
+  description String?
+  position    Int
+  unlockRule  Json     @default("{\"type\":\"PREVIOUS_MODULE_COMPLETED\"}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons     Lesson[]
+
+  @@unique([courseId, position])
+  @@unique([courseId, slug])
+}
+
+model Lesson {
+  id          String           @id @default(cuid())
+  moduleId    String
+  slug        String
+  title       String
+  summary     String?
+  objectives  String[]
+  status      ContentStatus    @default(DRAFT)
+  version     Int              @default(1)
+  position    Int
+  durationMin Int?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  module      Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  blocks      LessonBlock[]
+  concepts    Concept[]        @relation("LessonConcepts")
+  progress       LessonProgress[]
+  sourceLinks    LessonSource[]
+
+  @@unique([moduleId, position])
+  @@unique([moduleId, slug])
+}
+
+model LessonBlock {
+  id              String   @id @default(cuid())
+  lessonId        String
+  type            String
+  position        Int
+  contentMarkdown String?
+  data            Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  lesson          Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonId, position])
+}
+
+model Concept {
+  id          String               @id @default(cuid())
+  slug        String               @unique
+  title       String
+  description String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  lessons     Lesson[]             @relation("LessonConcepts")
+  questions   Question[]           @relation("QuestionConcepts")
+  mastery     UserConceptMastery[]
+  mistakes    MistakeRecord[]
+}
+
+model Question {
+  id           String               @id @default(cuid())
+  type         QuestionType
+  status       ContentStatus        @default(DRAFT)
+  version      Int                  @default(1)
+  prompt       String
+  explanation  String?
+  hint         String?
+  difficulty   Int                  @default(1)
+  answerConfig Json
+  seedKey      String?              @unique
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  choices      QuestionChoice[]
+  concepts     Concept[]            @relation("QuestionConcepts")
+  assessments  AssessmentQuestion[]
+  mistakes     MistakeRecord[]
+  sources      QuestionSource[]
+
+  @@index([status, type])
+}
+
+model QuestionChoice {
+  id         String   @id @default(cuid())
+  questionId String
+  position   Int
+  text       String
+  isCorrect  Boolean  @default(false)
+  feedback   String?
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, position])
+}
+
+model Assessment {
+  id             String               @id @default(cuid())
+  courseId       String
+  slug           String
+  title          String
+  description    String?
+  type           AssessmentType
+  status         ContentStatus        @default(DRAFT)
+  version        Int                  @default(1)
+  feedbackMode   FeedbackMode         @default(AFTER_SUBMIT)
+  passingScore   Int                  @default(70)
+  randomizeOrder Boolean              @default(false)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  course         Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  sections       AssessmentSection[]
+  questions      AssessmentQuestion[]
+  attempts       AssessmentAttempt[]
+
+  @@unique([courseId, slug])
+  @@index([courseId, status])
+}
+
+model AssessmentSection {
+  id            String               @id @default(cuid())
+  assessmentId  String
+  title         String
+  instructions  String?
+  position      Int
+  questionCount Int?
+  randomize     Boolean              @default(false)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  assessment    Assessment           @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  questions     AssessmentQuestion[]
+
+  @@unique([assessmentId, position])
+}
+
+model AssessmentQuestion {
+  id                  String             @id @default(cuid())
+  assessmentId        String
+  assessmentSectionId String?
+  questionId          String
+  position            Int
+  points              Int                @default(1)
+  createdAt           DateTime           @default(now())
+  assessment          Assessment         @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  section             AssessmentSection? @relation(fields: [assessmentSectionId], references: [id], onDelete: SetNull)
+  question            Question           @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([assessmentId, position])
+  @@unique([assessmentId, questionId])
+  @@index([assessmentSectionId])
+}
+
+model AssessmentAttempt {
+  id            String            @id @default(cuid())
+  assessmentId  String
+  userId        String
+  attemptNumber Int
+  selectionSeed String
+  isSubmitted   Boolean           @default(false)
+  submittedAt   DateTime?
+  score         Int?
+  percentage    Int?
+  passed        Boolean?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  assessment    Assessment        @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  user          User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  questions     AttemptQuestion[]
+
+
+  @@unique([assessmentId, userId, attemptNumber])
+  @@index([userId, isSubmitted])
+}
+
+model AttemptQuestion {
+  id                   String            @id @default(cuid())
+  attemptId            String
+  questionId           String?
+  position             Int
+   questionVersion      Int
+   questionType         QuestionType
+   promptSnapshot       String
+  choicesSnapshot      Json?
+  answerConfigSnapshot Json
+  conceptIdsSnapshot   String[]
+  points               Int               @default(1)
+  createdAt            DateTime          @default(now())
+  attempt              AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  answers              AttemptAnswer[]
+  mistakes             MistakeRecord[]
+
+  @@unique([attemptId, position])
+}
+
+model AttemptAnswer {
+  id                String          @id @default(cuid())
+  attemptQuestionId String
+  answer            Json
+  isCorrect         Boolean
+  pointsAwarded     Int             @default(0)
+  gradedAt          DateTime        @default(now())
+  attemptQuestion   AttemptQuestion @relation(fields: [attemptQuestionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptQuestionId])
+}
+
+model CourseEnrollment {
+  id          String    @id @default(cuid())
+  userId      String
+  courseId    String
+  enrolledAt  DateTime  @default(now())
+  completedAt DateTime?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+}
+
+model LessonProgress {
+  id          String               @id @default(cuid())
+  userId      String
+  lessonId    String
+  status      LessonProgressStatus @default(NOT_STARTED)
+  completedAt DateTime?
+  updatedAt   DateTime             @updatedAt
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson      Lesson               @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+}
+
+model UserConceptMastery {
+  id             String   @id @default(cuid())
+  userId         String
+  conceptId      String
+  correctCount   Int      @default(0)
+  incorrectCount Int      @default(0)
+  masteryPercent Int      @default(0)
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  concept        Concept  @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, conceptId])
+}
+
+model MistakeRecord {
+  id                String    @id @default(cuid())
+  userId            String
+  conceptId         String?
+  questionId        String?
+  attemptQuestionId String?
+  wrongCount        Int       @default(1)
+  lastSeenAt        DateTime  @default(now())
+  resolvedAt        DateTime?
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  concept           Concept?        @relation(fields: [conceptId], references: [id], onDelete: SetNull)
+  question          Question?       @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  attemptQuestion   AttemptQuestion? @relation(fields: [attemptQuestionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, resolvedAt])
+  @@index([conceptId])
+  @@index([questionId])
+  @@index([attemptQuestionId])
+}
+
+model ContentRevision {
+  id         String        @id @default(cuid())
+  entityType String
+  entityId   String
+  version    Int
+  status     ContentStatus @default(DRAFT)
+  snapshot   Json
+  summary    String?
+  actorId    String?
+  actorType  ActorType     @default(USER)
+  createdAt  DateTime      @default(now())
+  actor      User?         @relation("RevisionActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@unique([entityType, entityId, version])
+  @@index([entityType, entityId, status])
+}
+
+model Source {
+  id             String    @id @default(cuid())
+  courseId       String?
+  title          String
+  sourceType     String
+  publisher      String
+  author         String?
+  url            String?
+  citation       String?
+  publishedAt    DateTime?
+  checkedAt      DateTime
+  jurisdiction   String?
+  effectiveFrom  DateTime?
+  effectiveUntil DateTime?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  course         Course?       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessonLinks    LessonSource[]
+  questions      QuestionSource[]
+
+  @@index([courseId])
+}
+
+model LessonSource {
+  lessonId  String
+  sourceId  String
+  createdAt DateTime @default(now())
+  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  source    Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@id([lessonId, sourceId])
+  @@index([sourceId])
+}
+
+model QuestionSource {
+  questionId String
+  sourceId   String
+  createdAt  DateTime @default(now())
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  source     Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, sourceId])
+  @@index([sourceId])
+}
+
+model McpClient {
+  id          String     @id @default(cuid())
+  name        String
+  tokenHash   String     @unique
+  permissions String[]
+  revokedAt   DateTime?
+  lastUsedAt  DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  auditLogs   AuditLog[] @relation("McpActorAuditLogs")
+}
+
+model AuditLog {
+  id          String     @id @default(cuid())
+  actorType   ActorType
+  actorId     String?
+  mcpClientId String?
+  action      String
+  entityType  String
+  entityId    String?
+  source      String?
+  before      Json?
+  after       Json?
+  createdAt   DateTime   @default(now())
+  userActor   User?      @relation("UserActorAuditLogs", fields: [actorId], references: [id], onDelete: SetNull)
+  mcpClient   McpClient? @relation("McpActorAuditLogs", fields: [mcpClientId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([actorType, createdAt])
+}

@@ -1,0 +1,1 @@
+Personal Learning OS MVP. Read `mem:conventions` for architectural constraints and `mem:tech_stack` for platform/tooling. Domain is Subject → Course → Module → Lesson → LessonBlock; governed content and MCP use shared services.

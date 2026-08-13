@@ -1,36 +1,26 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Personal Learning OS
 
-## Getting Started
+A multi-subject learning platform built around the hierarchy `Subject → Course → Module → Lesson → LessonBlock`. Accounting Week 01 is the MVP acceptance slice; subject-specific behavior belongs in interactive blocks rather than the core domain.
 
-First, run the development server:
+## Local development
+
+Use pnpm only. Accounts use an email and a unique username; either can be used to sign in. Passwords must be at least 8 characters. Setup, database, test, E2E, build, authentication, and MCP operating details are in [Local development](docs/operations/local-development.md).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+pnpm db:migrate
+pnpm db:seed
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## MVP architecture
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Next.js pages, Server Actions, route handlers, and MCP adapters are entry points. Shared server-only application services own validation, authorization, business rules, transactions, revisions, and audit logging; business operations do not access Prisma directly from UI or MCP tool modules.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Published content is revisioned rather than overwritten. Started assessment attempts snapshot questions, and submitted attempts are immutable and graded from those snapshots.
 
-## Learn More
+## MCP policy
 
-To learn more about Next.js, take a look at the following resources:
+The Streamable HTTP MCP endpoint is `/mcp`. Clients authenticate with bearer tokens that are stored only as hashes, receive explicit scopes, are limited to 60 requests per minute per client, and can be revoked. MCP cannot receive `publish:write` in the MVP: every MCP content write remains `DRAFT`, requires the relevant scope and Zod validation, and creates an `AuditLog` record. Human review and an Admin publish the content.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [ADR 0001](docs/decisions/0001-mvp-behavior-contracts.md) for the fixed MVP behavior contracts and [BREAKDOWN.md](BREAKDOWN.md) for domain and delivery detail.

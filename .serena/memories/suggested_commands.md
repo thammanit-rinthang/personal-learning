@@ -1,0 +1,1 @@
+Windows PowerShell. `rtk` is documented but unavailable: use direct commands. Primary commands: pnpm test, pnpm lint, pnpm exec tsc --noEmit, pnpm build, pnpm db:validate, pnpm db:generate, pnpm db:migrate, pnpm db:seed.
