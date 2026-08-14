@@ -12,6 +12,8 @@ export const permissionSchema = z.enum([
   "analytics:read",
   "source:read",
   "source:write",
+  "content:read_all",
+  "content:write_all",
   "publish:write",
 ]);
 

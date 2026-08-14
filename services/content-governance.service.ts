@@ -84,7 +84,7 @@ export async function publishContent(actor: Actor, input: PublishContentInput) {
 }
 
 export async function createDraftRevision(actor: Actor, entityType: ContentEntityType, entityId: string, snapshot: Prisma.InputJsonValue, summary: string) {
-  if (actor.type === "MCP") throw new AppError("FORBIDDEN", "MCP cannot create revisions for published content");
+  if (actor.type === "MCP" && !actor.permissions.includes("content:write_all")) throw new AppError("FORBIDDEN", "MCP requires content:write_all to create revisions for published content");
   return prisma.$transaction(async (tx) => {
     const content = await findContent(tx, entityType, entityId);
     if (!content) throw new AppError("NOT_FOUND", "Content not found");
@@ -97,7 +97,7 @@ export async function createDraftRevision(actor: Actor, entityType: ContentEntit
         status: ContentStatus.DRAFT,
         snapshot,
         summary,
-        actorId: actor.id,
+        actorId: actor.type === "USER" ? actor.id : undefined,
         actorType: actor.type,
       },
     });

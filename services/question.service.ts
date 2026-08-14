@@ -99,7 +99,7 @@ export async function listQuestions(actor: Actor, input: Partial<QuestionBankLis
     status: data.status,
     type: data.type as QuestionType | undefined,
     ...(data.query ? { prompt: { contains: data.query, mode: "insensitive" as const } } : {}),
-    ...(actor.type === "MCP" ? { status: ContentStatus.PUBLISHED } : {}),
+    ...(actor.type === "MCP" && !actor.permissions.includes("content:read_all") ? { status: ContentStatus.PUBLISHED } : {}),
   };
   const [items, total] = await prisma.$transaction([
     prisma.question.findMany({
@@ -120,7 +120,7 @@ export async function getQuestion(actor: Actor, questionId: string) {
     throw new AppError("FORBIDDEN", "Learners cannot access questions outside an attempt");
   }
   const question = await prisma.question.findFirst({
-    where: { id: questionId, ...(actor.type === "MCP" ? { status: ContentStatus.PUBLISHED } : {}) },
+    where: { id: questionId, ...(actor.type === "MCP" && !actor.permissions.includes("content:read_all") ? { status: ContentStatus.PUBLISHED } : {}) },
     include: { choices: { orderBy: { position: "asc" } }, concepts: true, sources: { include: { source: true } } },
   });
   if (!question) throw new AppError("NOT_FOUND", "Question not found");
@@ -134,7 +134,7 @@ export async function updateQuestion(actor: Actor, questionId: string, input: Up
   if (existing.status === ContentStatus.PUBLISHED) {
     return createDraftRevision(actor, "QUESTION", questionId, { ...existing, ...data } as import("@/app/generated/prisma/client").Prisma.InputJsonValue, "Question edit proposed from published content");
   }
-  if (actor.type === "MCP" && existing.status !== ContentStatus.DRAFT) throw new AppError("FORBIDDEN", "MCP may only update draft content");
+  if (actor.type === "MCP" && existing.status !== ContentStatus.DRAFT && !actor.permissions.includes("content:write_all")) throw new AppError("FORBIDDEN", "MCP may only update draft content");
   return prisma.$transaction(async (tx) => {
     const question = await tx.question.update({
       where: { id: questionId },

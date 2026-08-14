@@ -78,7 +78,7 @@ export async function updateCourse(actor: Actor, courseId: string, input: Course
       await createAuditLog({ actor, action: "CREATE_DRAFT_REVISION", entityType: "COURSE", entityId: courseId, before: before as Prisma.InputJsonValue, after: data as Prisma.InputJsonValue, db: tx });
       return before;
     }
-    if (actor.type === "MCP" && before.status !== ContentStatus.DRAFT) throw new AppError("FORBIDDEN", "MCP may only update draft content");
+    if (actor.type === "MCP" && before.status !== ContentStatus.DRAFT && !actor.permissions.includes("content:write_all")) throw new AppError("FORBIDDEN", "MCP may only update draft content");
     const course = await tx.course.update({ where: { id: courseId }, data });
     await createAuditLog({ actor, action: "UPDATE_COURSE", entityType: "COURSE", entityId: course.id, before: before as Prisma.InputJsonValue, after: course as Prisma.InputJsonValue, db: tx });
     return course;
@@ -164,7 +164,7 @@ export async function getCourse(actor: Actor, courseId: string) {
   const course = await prisma.course.findFirst({
     where: {
       id: courseId,
-      ...(actor.type === "MCP" ? { status: ContentStatus.PUBLISHED } : {}),
+      ...(actor.type === "MCP" && !actor.permissions.includes("content:read_all") ? { status: ContentStatus.PUBLISHED } : {}),
       ...(actor.type === "USER" && actor.role === "LEARNER"
         ? { status: ContentStatus.PUBLISHED, enrollments: { some: { userId: actor.id } } }
         : {}),
@@ -175,7 +175,7 @@ export async function getCourse(actor: Actor, courseId: string) {
         orderBy: { position: "asc" },
         include: {
           lessons: {
-            where: actor.type === "MCP" ? { status: ContentStatus.PUBLISHED } : undefined,
+            where: actor.type === "MCP" && !actor.permissions.includes("content:read_all") ? { status: ContentStatus.PUBLISHED } : undefined,
             orderBy: { position: "asc" },
             select: { id: true, slug: true, title: true, summary: true, status: true, position: true, durationMin: true },
           },
@@ -195,7 +195,7 @@ export async function listCourses(actor: Actor) {
   requirePermission(actor, "course:read");
 
   return prisma.course.findMany({
-    where: actor.type === "MCP"
+    where: actor.type === "MCP" && !actor.permissions.includes("content:read_all")
       ? { status: ContentStatus.PUBLISHED }
       : actor.type === "USER" && actor.role === "LEARNER"
         ? { status: ContentStatus.PUBLISHED, enrollments: { some: { userId: actor.id } } }

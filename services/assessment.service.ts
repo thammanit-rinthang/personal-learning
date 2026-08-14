@@ -146,7 +146,7 @@ export async function attachQuestionsToAssessment(actor: Actor, input: AttachQue
       select: { id: true, status: true, title: true },
     });
     if (!assessment) throw new AppError("NOT_FOUND", "Assessment not found");
-    if (actor.type === "MCP" && assessment.status !== ContentStatus.DRAFT) {
+    if (actor.type === "MCP" && assessment.status !== ContentStatus.DRAFT && !actor.permissions.includes("content:write_all")) {
       throw new AppError("FORBIDDEN", "MCP may only attach questions to draft assessments");
     }
 
@@ -167,7 +167,7 @@ export async function attachQuestionsToAssessment(actor: Actor, input: AttachQue
     if (missingQuestionIds.length > 0) {
       throw new AppError("NOT_FOUND", "One or more questions were not found", { details: { questionIds: missingQuestionIds } });
     }
-    if (actor.type === "MCP" && questions.some((question) => question.status !== ContentStatus.DRAFT)) {
+    if (actor.type === "MCP" && questions.some((question) => question.status !== ContentStatus.DRAFT) && !actor.permissions.includes("content:write_all")) {
       throw new AppError("FORBIDDEN", "MCP may only attach draft questions");
     }
 

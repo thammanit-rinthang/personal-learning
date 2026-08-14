@@ -13,7 +13,10 @@ export async function getAssessmentForAdmin(actor: Actor, assessmentId: string) 
   requirePermission(actor, "assessment:read");
   return prisma.assessment.findUnique({
     where: { id: assessmentId },
-    include: { sections: { orderBy: { position: "asc" } } },
+    include: {
+      sections: { orderBy: { position: "asc" } },
+      questions: { orderBy: { position: "asc" }, include: { question: { include: { choices: { orderBy: { position: "asc" } }, concepts: true } } } },
+    },
   });
 }
 

@@ -94,7 +94,7 @@ export async function getLesson(actor: Actor, lessonId: string) {
   const lesson = await prisma.lesson.findFirst({
     where: {
       id: lessonId,
-      ...(actor.type === "MCP" ? { status: ContentStatus.PUBLISHED } : {}),
+      ...(actor.type === "MCP" && !actor.permissions.includes("content:read_all") ? { status: ContentStatus.PUBLISHED } : {}),
     },
     include: {
       module: {

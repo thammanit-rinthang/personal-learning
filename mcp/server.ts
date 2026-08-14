@@ -7,10 +7,13 @@ import { registerAnalyticsTools } from "@/mcp/tools/analytics.tools";
 import { registerCourseReadTools } from "@/mcp/tools/course-read.tools";
 import { registerLessonReadTools } from "@/mcp/tools/lesson-read.tools";
 import { registerAssessmentWriteTools } from "@/mcp/tools/assessment-write.tools";
+import { registerAssessmentReadTools } from "@/mcp/tools/assessment-read.tools";
 import { registerCourseWriteTools } from "@/mcp/tools/course-write.tools";
 import { registerLessonWriteTools } from "@/mcp/tools/lesson-write.tools";
 import { registerQuestionWriteTools } from "@/mcp/tools/question-write.tools";
 import { registerValidationTools } from "@/mcp/tools/validation.tools";
+import { registerQuestionReadTools } from "@/mcp/tools/question-read.tools";
+import { registerSourceTools } from "@/mcp/tools/source.tools";
 
 export function createMcpServer(actor: Actor): McpServer {
   const server = new McpServer({
@@ -28,6 +31,9 @@ export function createMcpServer(actor: Actor): McpServer {
   registerLessonWriteTools(server, actor);
   registerQuestionWriteTools(server, actor);
   registerAssessmentWriteTools(server, actor);
+  registerAssessmentReadTools(server, actor);
+  registerQuestionReadTools(server, actor);
+  registerSourceTools(server, actor);
   registerValidationTools(server, actor);
 
   return server;
