@@ -14,6 +14,7 @@ import { registerQuestionWriteTools } from "@/mcp/tools/question-write.tools";
 import { registerValidationTools } from "@/mcp/tools/validation.tools";
 import { registerQuestionReadTools } from "@/mcp/tools/question-read.tools";
 import { registerSourceTools } from "@/mcp/tools/source.tools";
+import { registerSubjectTools } from "@/mcp/tools/subject.tools";
 
 export function createMcpServer(actor: Actor): McpServer {
   const server = new McpServer({
@@ -34,6 +35,7 @@ export function createMcpServer(actor: Actor): McpServer {
   registerAssessmentReadTools(server, actor);
   registerQuestionReadTools(server, actor);
   registerSourceTools(server, actor);
+  registerSubjectTools(server, actor);
   registerValidationTools(server, actor);
 
   return server;

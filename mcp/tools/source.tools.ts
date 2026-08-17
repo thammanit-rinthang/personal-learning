@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Actor } from "@/server/actor";
-import { createSource, deleteSource, getSource, listSources, updateSource } from "@/services/source.service";
+import { attachConceptToLesson, attachSourceToLesson, attachSourceToQuestion, createSource, deleteSource, getSource, listSources, updateSource } from "@/services/source.service";
 import { mcpErrorResult, jsonResult } from "@/mcp/tools/result";
 
 const sourceFields = {
@@ -30,5 +30,14 @@ export function registerSourceTools(server: McpServer, actor: Actor) {
   });
   server.registerTool("delete_source", { description: "Delete a source record.", inputSchema: { sourceId: z.string().min(1) }, annotations: { destructiveHint: true } }, async ({ sourceId }) => {
     try { return jsonResult(await deleteSource(actor, sourceId)); } catch (error) { return mcpErrorResult(error); }
+  });
+  server.registerTool("attach_source_to_lesson", { description: "Attach an existing source to a lesson.", inputSchema: { lessonId: z.string().min(1), sourceId: z.string().min(1) }, annotations: { idempotentHint: true } }, async (input) => {
+    try { return jsonResult(await attachSourceToLesson(actor, input)); } catch (error) { return mcpErrorResult(error); }
+  });
+  server.registerTool("attach_source_to_question", { description: "Attach an existing source to a question.", inputSchema: { questionId: z.string().min(1), sourceId: z.string().min(1) }, annotations: { idempotentHint: true } }, async (input) => {
+    try { return jsonResult(await attachSourceToQuestion(actor, input)); } catch (error) { return mcpErrorResult(error); }
+  });
+  server.registerTool("attach_concept_to_lesson", { description: "Attach an existing concept to a lesson.", inputSchema: { lessonId: z.string().min(1), conceptId: z.string().min(1) }, annotations: { idempotentHint: true } }, async (input) => {
+    try { return jsonResult(await attachConceptToLesson(actor, input)); } catch (error) { return mcpErrorResult(error); }
   });
 }

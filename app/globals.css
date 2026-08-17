@@ -51,7 +51,7 @@
   --color-warning: var(--warning);
   --color-danger: var(--danger);
   --color-focus-ring: var(--focus-ring);
-  --font-sans: var(--font-noto-sans-thai), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: Tahoma, "Leelawadee UI", ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
