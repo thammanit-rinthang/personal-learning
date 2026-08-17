@@ -79,6 +79,9 @@ model User {
   contentRevisions ContentRevision[]    @relation("RevisionActor")
   passwordHash     String?
   sessions         Session[]
+  oauthCodes       McpAuthorizationCode[]
+  oauthRefreshTokens McpRefreshToken[]
+  mcpClients       McpClient[]
 }
 
 model Session {
@@ -468,12 +471,59 @@ model McpClient {
   id          String     @id @default(cuid())
   name        String
   tokenHash   String     @unique
+  userId      String?
   permissions String[]
+  expiresAt   DateTime?
   revokedAt   DateTime?
   lastUsedAt  DateTime?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+  user        User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
   auditLogs   AuditLog[] @relation("McpActorAuditLogs")
+
+  @@index([userId, revokedAt])
+}
+
+model McpOAuthClient {
+  clientId     String   @id
+  redirectUris String[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  codes        McpAuthorizationCode[]
+  refreshTokens McpRefreshToken[]
+}
+
+model McpAuthorizationCode {
+  id                  String          @id @default(cuid())
+  codeHash            String          @unique
+  clientId            String
+  userId              String
+  redirectUri         String
+  codeChallenge       String
+  codeChallengeMethod String
+  resource            String
+  expiresAt            DateTime
+  usedAt              DateTime?
+  createdAt           DateTime        @default(now())
+  client              McpOAuthClient  @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, expiresAt])
+  @@index([userId, expiresAt])
+}
+
+model McpRefreshToken {
+  id         String         @id @default(cuid())
+  tokenHash  String         @unique
+  clientId   String
+  userId     String
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime       @default(now())
+  client     McpOAuthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
 }
 
 model AuditLog {

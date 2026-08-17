@@ -56,7 +56,7 @@ export async function authenticateMcpRequest(request: Request, limiter: RateLimi
     throw new AppError("UNAUTHORIZED", "Invalid token");
   }
 
-  if (client.revokedAt && client.revokedAt <= new Date()) {
+  if ((client.revokedAt && client.revokedAt <= new Date()) || (client.expiresAt && client.expiresAt <= new Date())) {
     throw new AppError("UNAUTHORIZED", "Token revoked");
   }
 

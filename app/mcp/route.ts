@@ -5,9 +5,13 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 
 export const runtime = "nodejs";
 
-function errorResponse(error: unknown): Response {
+function errorResponse(error: unknown, request: Request): Response {
   if (error instanceof AppError) {
-    return Response.json({ error: { code: error.code, message: error.message } }, { status: error.status });
+    const headers = new Headers({ "content-type": "application/json" });
+    if (error.code === "UNAUTHORIZED") {
+      headers.set("WWW-Authenticate", `Bearer resource_metadata="${new URL("/.well-known/oauth-protected-resource", request.url).toString()}"`);
+    }
+    return new Response(JSON.stringify({ error: { code: error.code, message: error.message } }), { status: error.status, headers });
   }
 
   return Response.json({ error: { code: "UNAUTHORIZED", message: "Unauthorized" } }, { status: 401 });
@@ -25,7 +29,7 @@ async function handleMcpRequest(request: Request): Promise<Response> {
     await server.connect(transport);
     return transport.handleRequest(request);
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }
 

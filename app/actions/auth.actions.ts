@@ -15,7 +15,12 @@ function credentials(formData: FormData) {
     identifier: String(formData.get("identifier") ?? ""),
     password: String(formData.get("password") ?? ""),
     confirmPassword: String(formData.get("confirmPassword") ?? ""),
+    returnTo: String(formData.get("returnTo") ?? ""),
   };
+}
+
+function safeReturnTo(value: string) {
+  return value.startsWith("/") && !value.startsWith("//") ? value : "/";
 }
 
 function messageFor(error: unknown) {
@@ -37,6 +42,7 @@ export async function registerAction(_: AuthActionState, formData: FormData): Pr
 }
 
 export async function loginAction(_: AuthActionState, formData: FormData): Promise<AuthActionState> {
+  const returnTo = safeReturnTo(String(formData.get("returnTo") ?? ""));
   try {
     const user = await authenticateUser(credentials(formData));
     const session = await createSession(user.id);
@@ -44,7 +50,7 @@ export async function loginAction(_: AuthActionState, formData: FormData): Promi
   } catch (error) {
     return { error: messageFor(error) };
   }
-  redirect("/");
+  redirect(returnTo);
 }
 
 export async function logoutAction() {

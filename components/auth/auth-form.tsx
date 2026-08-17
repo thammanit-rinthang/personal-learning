@@ -8,16 +8,18 @@ import { FormField } from "@/components/ui/form-field";
 type AuthFormProps = {
   mode: "login" | "register";
   action: (state: AuthActionState, formData: FormData) => Promise<AuthActionState>;
+  returnTo?: string;
 };
 
 const initialState: AuthActionState = {};
 
-export function AuthForm({ mode, action }: AuthFormProps) {
+export function AuthForm({ mode, action, returnTo }: AuthFormProps) {
   const [state, formAction, pending] = useActionState(action, initialState);
   const isRegister = mode === "register";
 
   return (
     <form action={formAction} className="space-y-5" noValidate>
+      {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
       {isRegister ? <FormField name="name" label="ชื่อที่แสดง" autoComplete="name" required /> : null}
       {isRegister ? <FormField name="username" label="ชื่อผู้ใช้" autoComplete="username" helpText="3-30 ตัว ใช้ a-z, 0-9, _ หรือ -" required /> : <FormField name="identifier" label="อีเมลหรือชื่อผู้ใช้" autoComplete="username" required />}
       {isRegister ? <FormField name="email" label="อีเมล" type="email" autoComplete="email" inputMode="email" required /> : null}
